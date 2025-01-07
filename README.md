@@ -62,11 +62,11 @@ A NestJS microservice for managing orders in our e-commerce platform.
 
 The service runs on `http://localhost:3001` with the following endpoints:
 
-- `POST /api/orders` - Create a product
+- `POST /api/orders` - Create an order
 - `GET /api/orders` - List all orders
-- `GET /api/orders/:id` - Get a single product
-- `PUT /api/orders/:id` - Update a product
-- `DELETE /api/orders/:id` - Delete a product
+- `GET /api/orders/:id` - Get a single order
+- `PUT /api/orders/:id` - Update an order
+- `DELETE /api/orders/:id` - Delete an order
 
 Documentation is available at `http://localhost:3001/api/docs`
 
