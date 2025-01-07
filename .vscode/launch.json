@@ -4,7 +4,7 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug NestJS",
+      "name": "Run Service",
       "runtimeExecutable": "yarn",
       "runtimeArgs": ["start:debug"],
       "cwd": "${workspaceFolder}",
@@ -13,6 +13,15 @@
       "sourceMaps": true,
       "autoAttachChildProcesses": true,
       "restart": true
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Run Tests",
+      "runtimeExecutable": "yarn",
+      "runtimeArgs": ["test"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
     }
   ]
 }

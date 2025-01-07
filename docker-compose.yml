@@ -1,9 +1,9 @@
 services:
   mongodb:
     image: mongo:latest
-    command: ['--replSet', 'rs0', '--bind_ip_all']
+    command: ['--replSet', 'rs0_orders', '--bind_ip_all']
     ports:
-      - '27017:27017'
+      - '27018:27017'
     volumes:
       - mongodb_data:/data/db
 
@@ -15,7 +15,7 @@ services:
     command: >
       mongosh --host mongodb:27017 --eval '
       rs.initiate({
-        _id: "rs0",
+        _id: "rs0_orders",
         members: [{ _id: 0, host: "localhost:27017" }]
       })
       '

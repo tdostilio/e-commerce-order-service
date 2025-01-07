@@ -16,15 +16,15 @@ async function bootstrap() {
 
   // Swagger setup
   const config = new DocumentBuilder()
-    .setTitle('Products API') // Title of the API
-    .setDescription('The products API description') // Description of the API
+    .setTitle('Orders API') // Title of the API
+    .setDescription('The orders API description') // Description of the API
     .setVersion('1.0') // Version of the API
-    .addTag('products') // Tag for the API
+    .addTag('orders') // Tag for the API
     .build(); // Build the configuration
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document); // Serves Swagger UI at /api/docs
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3001);
 }
 bootstrap();

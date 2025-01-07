@@ -1,6 +1,6 @@
-# Product Service
+# Order Service
 
-A NestJS microservice for managing products in our e-commerce platform.
+A NestJS microservice for managing orders in our e-commerce platform.
 
 ## Prerequisites
 
@@ -14,7 +14,6 @@ A NestJS microservice for managing products in our e-commerce platform.
 
    ```
    git clone <repository-url>
-   cd e-commerce/packages/product-service
    ```
 
 2. **Set up environment variables**
@@ -27,7 +26,7 @@ A NestJS microservice for managing products in our e-commerce platform.
    The .env file should contain:
 
    ```
-   DATABASE_URL="mongodb://localhost:27017/products?replicaSet=rs0&directConnection=true"
+   DATABASE_URL="mongodb://localhost:27018/orders?replicaSet=rs0_orders&directConnection=true"
    ```
 
 3. **Start MongoDB with Docker**
@@ -61,29 +60,26 @@ A NestJS microservice for managing products in our e-commerce platform.
 
 ## API Endpoints
 
-The service runs on `http://localhost:3000` with the following endpoints:
+The service runs on `http://localhost:3001` with the following endpoints:
 
-- `POST /api/products` - Create a product
-- `GET /api/products` - List all products
-- `GET /api/products/:id` - Get a single product
-- `PUT /api/products/:id` - Update a product
-- `DELETE /api/products/:id` - Delete a product
+- `POST /api/orders` - Create a product
+- `GET /api/orders` - List all orders
+- `GET /api/orders/:id` - Get a single product
+- `PUT /api/orders/:id` - Update a product
+- `DELETE /api/orders/:id` - Delete a product
 
-Documentation is available at `http://localhost:3000/api/docs`
+Documentation is available at `http://localhost:3001/api/docs`
 
 ## Example Request
 
-Create a product
+Create an order
 
 ```
-curl -X POST http://localhost:3000/api/products \
+curl -X POST http://localhost:3001/api/orders \
 -H "Content-Type: application/json" \
 -d '{
-"name": "Test Product",
-"description": "A test product",
-"price": 29.99,
 "sku": "TEST-001",
-"stock": 100
+"quantity": 100
 }'
 ```
 

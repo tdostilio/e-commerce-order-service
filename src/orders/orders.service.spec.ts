@@ -1,14 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ProductsService } from './products.service';
+import { OrdersService } from './orders.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-describe('ProductsService', () => {
-  let service: ProductsService;
+describe('OrdersService', () => {
+  let service: OrdersService;
   let prisma: PrismaService;
 
   // Mock all Prisma operations we'll need
   const mockPrismaService = {
-    product: {
+    order: {
       create: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -20,59 +20,56 @@ describe('ProductsService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        ProductsService,
+        OrdersService,
         { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();
 
-    service = module.get<ProductsService>(ProductsService);
+    service = module.get<OrdersService>(OrdersService);
     prisma = module.get<PrismaService>(PrismaService);
     jest.clearAllMocks();
   });
 
   // CREATE
   describe('create', () => {
-    it('should create a product successfully', async () => {
+    it('should create an order successfully', async () => {
       // Arrange
-      const productData = {
-        name: 'Test Product',
-        description: 'Test Description',
-        price: 29.99,
+      const orderData = {
         sku: 'TEST-001',
-        stock: 100,
+        quantity: 100,
       };
-      const expectedProduct = {
+      const expectedOrder = {
         id: '123',
         createdAt: new Date(),
         updatedAt: new Date(),
-        ...productData,
+        status: 'pending',
+        ...orderData,
       };
-      mockPrismaService.product.create.mockResolvedValue(expectedProduct);
+      mockPrismaService.order.create.mockResolvedValue(expectedOrder);
 
       // Act
-      const result = await service.create(productData);
+      const result = await service.create(orderData);
 
       // Assert
-      expect(result).toEqual(expectedProduct);
-      expect(prisma.product.create).toHaveBeenCalledWith({ data: productData });
+      expect(result).toEqual(expectedOrder);
+      expect(prisma.order.create).toHaveBeenCalledWith({
+        data: { status: 'pending', ...orderData },
+      });
     });
 
-    it('should handle duplicate SKU error', async () => {
+    it('should handle quantity of zero error', async () => {
       // Arrange
-      const productData = {
-        name: 'Test Product',
-        description: 'Test Description',
-        price: 29.99,
-        sku: 'DUPLICATE',
-        stock: 100,
+      const orderData = {
+        sku: 'TEST-001',
+        quantity: 0,
       };
-      mockPrismaService.product.create.mockRejectedValue({
+      mockPrismaService.order.create.mockRejectedValue({
         code: 'P2002',
         meta: { target: ['sku'] },
       });
 
       // Act & Assert
-      await expect(service.create(productData)).rejects.toThrow();
+      await expect(service.create(orderData)).rejects.toThrow();
     });
   });
 
@@ -80,43 +77,45 @@ describe('ProductsService', () => {
   describe('findAll', () => {
     it('should return all products', async () => {
       // Arrange
-      const expectedProducts = [
-        { id: '1', name: 'Product 1' },
-        { id: '2', name: 'Product 2' },
+      const expectedOrders = [
+        { id: '1', sku: 'Product 1', quantity: 100, status: 'pending' },
+        { id: '2', sku: 'Product 2', quantity: 200, status: 'pending' },
       ];
-      mockPrismaService.product.findMany.mockResolvedValue(expectedProducts);
+      mockPrismaService.order.findMany.mockResolvedValue(expectedOrders);
 
       // Act
       const result = await service.findAll();
 
       // Assert
-      expect(result).toEqual(expectedProducts);
-      expect(prisma.product.findMany).toHaveBeenCalled();
+      expect(result).toEqual(expectedOrders);
+      expect(prisma.order.findMany).toHaveBeenCalled();
     });
   });
 
   describe('findOne', () => {
     it('should return a product if found', async () => {
       // Arrange
-      const expectedProduct = {
+      const expectedOrder = {
         id: '123',
-        name: 'Test Product',
+        sku: 'TEST-001',
+        quantity: 100,
+        status: 'pending',
       };
-      mockPrismaService.product.findUnique.mockResolvedValue(expectedProduct);
+      mockPrismaService.order.findUnique.mockResolvedValue(expectedOrder);
 
       // Act
       const result = await service.findOne('123');
 
       // Assert
-      expect(result).toEqual(expectedProduct);
-      expect(prisma.product.findUnique).toHaveBeenCalledWith({
+      expect(result).toEqual(expectedOrder);
+      expect(prisma.order.findUnique).toHaveBeenCalledWith({
         where: { id: '123' },
       });
     });
 
     it('should throw an error if product not found', async () => {
       // Arrange
-      mockPrismaService.product.findUnique.mockResolvedValue(null);
+      mockPrismaService.order.findUnique.mockResolvedValue(null);
 
       // Assert
       await expect(service.findOne('nonexistent')).rejects.toThrow();
@@ -127,34 +126,35 @@ describe('ProductsService', () => {
   describe('update', () => {
     it('should update a product successfully', async () => {
       // Arrange
-      const updateData = { name: 'Updated Name', price: 39.99 };
-      const expectedProduct = {
+      const updateData = { sku: 'TEST-001', quantity: 10 };
+      const expectedOrder = {
         id: '123',
         ...updateData,
         updatedAt: new Date(),
+        status: 'pending',
       };
-      mockPrismaService.product.update.mockResolvedValue(expectedProduct);
+      mockPrismaService.order.update.mockResolvedValue(expectedOrder);
 
       // Act
       const result = await service.update('123', updateData);
 
       // Assert
-      expect(result).toEqual(expectedProduct);
-      expect(prisma.product.update).toHaveBeenCalledWith({
-        where: { id: '123' },
-        data: updateData,
+      expect(result).toEqual(expectedOrder);
+      expect(prisma.order.update).toHaveBeenCalledWith({
+        where: { id: '123', status: 'pending' },
+        data: { ...updateData },
       });
     });
 
     it('should throw error if product not found during update', async () => {
       // Arrange
-      mockPrismaService.product.update.mockRejectedValue({
+      mockPrismaService.order.update.mockRejectedValue({
         code: 'P2025', // Prisma's "Record not found" error
       });
 
       // Act & Assert
       await expect(
-        service.update('nonexistent', { name: 'New Name' }),
+        service.update('nonexistent', { quantity: 10 }),
       ).rejects.toThrow();
     });
   });
@@ -163,25 +163,24 @@ describe('ProductsService', () => {
   describe('remove', () => {
     it('should delete a product successfully', async () => {
       // Arrange
-      const productToDelete = {
+      const orderToDelete = {
         id: '123',
-        name: 'To Be Deleted',
       };
-      mockPrismaService.product.delete.mockResolvedValue(productToDelete);
+      mockPrismaService.order.delete.mockResolvedValue(orderToDelete);
 
       // Act
       const result = await service.remove('123');
 
       // Assert
-      expect(result).toEqual(productToDelete);
-      expect(prisma.product.delete).toHaveBeenCalledWith({
+      expect(result).toEqual(orderToDelete);
+      expect(prisma.order.delete).toHaveBeenCalledWith({
         where: { id: '123' },
       });
     });
 
     it('should throw error if product not found during delete', async () => {
       // Arrange
-      mockPrismaService.product.delete.mockRejectedValue({
+      mockPrismaService.order.delete.mockRejectedValue({
         code: 'P2025',
       });
 
