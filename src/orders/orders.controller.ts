@@ -13,6 +13,11 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderNotFoundError } from './errors/order.errors';
+import { EventPattern } from '@nestjs/microservices';
+import {
+  ReservationFailedEvent,
+  ReservationConfirmedEvent,
+} from './events/order.events';
 
 // @Controller('orders') creates routes starting with /orders
 @ApiTags('orders')
@@ -67,53 +72,35 @@ export class OrdersController {
     }
   }
 
-  // In practice, I'd want orders to be created or updated only, not updated via API
-  // @Put(':id') creates a PUT /orders/:id endpoint
-  @Put(':id')
-  @ApiOperation({ summary: 'Update an order' })
+  // @Delete(':id') creates a DELETE /orders/:id endpoint
+  @Delete(':id')
+  @ApiOperation({ summary: 'Cancel an order' })
   @ApiResponse({
     status: 200,
-    description: 'The order has been updated successfully.',
+    description: 'The order has been cancelled successfully.',
   })
-  @ApiResponse({ status: 404, description: 'Order not found.' })
-  async update(
-    @Param('id') id: string,
-    @Body() updateData: Partial<CreateOrderDto>,
-  ) {
+  @ApiResponse({
+    status: 404,
+    description: 'Order not found.',
+  })
+  async remove(@Param('id') id: string) {
     try {
-      // will error if trying to update an order already completed
-      return await this.ordersService.update(id, updateData);
+      return await this.ordersService.cancelOrder(id);
     } catch (error) {
       if (error instanceof OrderNotFoundError) {
-        throw new NotFoundException(
-          `Product with ID ${id} not found or is already completed`,
-        );
+        throw new NotFoundException(`Order with ID ${id} not found`);
       }
       throw error;
     }
   }
 
-  // @Delete(':id') creates a DELETE /orders/:id endpoint
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete an order' })
-  @ApiResponse({
-    status: 200,
-    description: 'The order has been deleted successfully.',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Order not found or is already completed.',
-  })
-  async remove(@Param('id') id: string) {
-    try {
-      return await this.ordersService.remove(id);
-    } catch (error) {
-      if (error instanceof OrderNotFoundError) {
-        throw new NotFoundException(
-          `Order with ID ${id} not found or is already completed`,
-        );
-      }
-      throw error;
-    }
+  @EventPattern('inventory.reservation_confirmed')
+  async handleReservationConfirmed(event: ReservationConfirmedEvent) {
+    await this.ordersService.handleReservationConfirmed(event);
+  }
+
+  @EventPattern('inventory.reservation_failed')
+  async handleReservationFailed(event: ReservationFailedEvent) {
+    await this.ordersService.handleReservationFailed(event);
   }
 }

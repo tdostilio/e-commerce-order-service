@@ -1,85 +1,174 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { ClientProxy } from '@nestjs/microservices';
+import { OrderStatus } from './enums/order-status.enum';
 import {
-  OrderNotFoundError,
-  InvalidParameterError,
-} from './errors/order.errors';
+  ReservationConfirmedEvent,
+  ReservationFailedEvent,
+  ReservationCancelledEvent,
+} from './events/order.events';
+import { Cron } from '@nestjs/schedule';
+import { OrderNotFoundError } from './errors/order.errors';
+import { lastValueFrom } from 'rxjs';
 
-// @Injectable() marks this as a service that can be injected into other classes
 @Injectable()
-export class OrdersService {
-  // Prisma is automatically injected by NestJS's dependency injection
-  constructor(private prisma: PrismaService) {}
+export class OrdersService implements OnModuleInit {
+  private readonly TIMEOUT_MINUTES = 5;
+  private readonly logger = new Logger(OrdersService.name);
 
-  // Get all orders, optionally by status, from the database
-  async findAll(status?: string) {
-    if (!status) {
-      return this.prisma.order.findMany();
-    }
-    return this.prisma.order.findMany({ where: { status } });
+  constructor(
+    private prisma: PrismaService,
+    @Inject('INVENTORY_SERVICE') private inventoryClient: ClientProxy,
+  ) {}
+
+  async onModuleInit() {
+    await this.inventoryClient.connect();
   }
 
-  // Get a single order by ID
-  async findOne(id: string) {
-    const order = await this.prisma.order.findUnique({
+  async create(data: CreateOrderDto) {
+    try {
+      const expiration = new Date();
+      expiration.setMinutes(expiration.getMinutes() + this.TIMEOUT_MINUTES);
+
+      const order = await this.prisma.order.create({
+        data: {
+          ...data,
+          status: OrderStatus.PENDING,
+          expiration,
+        },
+      });
+
+      this.logger.log(`Publishing order created event for order ${order.id}`);
+      await lastValueFrom(
+        this.inventoryClient.emit('order.created', {
+          orderId: order.id,
+          sku: order.sku,
+          quantity: order.quantity,
+        }),
+      );
+      this.logger.log(`Successfully published order created event`);
+
+      return order;
+    } catch (error) {
+      this.logger.error(
+        `Failed to create order: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  async handleInventoryReserved(event: ReservationConfirmedEvent) {
+    await this.prisma.order.update({
+      where: { id: event.orderId },
+      data: {
+        status: OrderStatus.CONFIRMED,
+        expiration: null,
+      },
+    });
+  }
+
+  async handleReservationFailed(event: ReservationFailedEvent) {
+    await this.prisma.order.update({
+      where: { id: event.orderId },
+      data: {
+        status: OrderStatus.FAILED,
+        expiration: null,
+      },
+    });
+  }
+
+  async cancelOrder(id: string) {
+    const order = await this.prisma.order.update({
       where: { id },
+      data: { status: OrderStatus.CANCELLING },
     });
 
-    if (!order) {
-      throw new OrderNotFoundError(id);
-    }
+    this.inventoryClient.emit('order.cancelled', {
+      orderId: order.id,
+    });
 
     return order;
   }
 
-  // Create a new Order
-  async create(data: CreateOrderDto) {
-    try {
-      // TODO: Add logic to check if the order is valid and product is in stock
-      // TODO: Publish an event to the message queue
-      if (data.quantity <= 0) {
-        throw new InvalidParameterError('Quantity must be greater than 0');
-      }
-      return await this.prisma.order.create({
+  async handleReservationCancelled(event: ReservationCancelledEvent) {
+    await this.prisma.order.update({
+      where: { id: event.orderId },
+      data: { status: OrderStatus.CANCELLED },
+    });
+  }
+
+  @Cron('* * * * *') // Run every minute
+  async handleTimeouts() {
+    const timedOutOrders = await this.prisma.order.findMany({
+      where: {
+        status: OrderStatus.PENDING,
+        expiration: {
+          lt: new Date(),
+        },
+      },
+    });
+
+    for (const order of timedOutOrders) {
+      await this.prisma.order.update({
+        where: { id: order.id },
         data: {
-          ...data,
-          status: 'pending',
+          status: OrderStatus.FAILED,
+          expiration: null,
         },
       });
-    } catch (error) {
-      throw error;
     }
   }
 
-  // Update an existing order
-  // Partial<CreateorderDto> means all fields are optional
-  async update(id: string, data: Partial<CreateOrderDto>) {
-    try {
-      // error if trying to update an order already completed
-      return await this.prisma.order.update({
-        where: { id, status: 'pending' },
-        data,
-      });
-    } catch (error) {
-      if (error.code === 'P2025') {
-        throw new OrderNotFoundError(id);
-      }
-      throw error;
-    }
+  async handleReservationConfirmed(event: ReservationConfirmedEvent) {
+    await this.prisma.order.update({
+      where: { id: event.orderId },
+      data: {
+        status: OrderStatus.CONFIRMED,
+        expiration: null,
+      },
+    });
   }
 
-  // Delete an order
+  async findAll(status?: string) {
+    return this.prisma.order.findMany({
+      where: status ? { status } : undefined,
+    });
+  }
+
+  async findOne(id: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+    });
+    if (!order) {
+      throw new OrderNotFoundError(id);
+    }
+    return order;
+  }
+
+  async update(id: string, updateData: Partial<CreateOrderDto>) {
+    const order = await this.findOne(id);
+
+    if (order.status === OrderStatus.CONFIRMED) {
+      throw new OrderNotFoundError(id);
+    }
+
+    return this.prisma.order.update({
+      where: { id },
+      data: updateData,
+    });
+  }
+
   async remove(id: string) {
-    try {
-      return await this.prisma.order.delete({
-        where: { id },
-      });
-    } catch (error) {
-      if (error.code === 'P2025') {
-        throw new OrderNotFoundError(id);
-      }
-      throw error;
+    const order = await this.findOne(id);
+
+    if (order.status === OrderStatus.CONFIRMED) {
+      throw new OrderNotFoundError(id);
     }
+
+    return this.prisma.order.delete({
+      where: { id },
+    });
   }
 }

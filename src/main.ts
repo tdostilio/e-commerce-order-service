@@ -1,30 +1,46 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { Logger, ValidationPipe } from '@nestjs/common';
+import { setupSwagger } from './config/swagger.config';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api');
+  const logger = new Logger('Bootstrap');
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // Strip non-whitelisted properties
-      forbidNonWhitelisted: true, // Throw error if non-whitelisted properties
-    }),
-  );
+  try {
+    const app = await NestFactory.create(AppModule);
+    const port = parseInt(process.env.PORT || '3001', 10); // Explicitly use 3001 as default
 
-  // Swagger setup
-  const config = new DocumentBuilder()
-    .setTitle('Orders API') // Title of the API
-    .setDescription('The orders API description') // Description of the API
-    .setVersion('1.0') // Version of the API
-    .addTag('orders') // Tag for the API
-    .build(); // Build the configuration
+    // Global configurations
+    app.useGlobalPipes(new ValidationPipe());
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document); // Serves Swagger UI at /api/docs
+    // Setup Swagger
+    setupSwagger(app);
 
-  await app.listen(process.env.PORT ?? 3001);
+    // Connect to RabbitMQ as a hybrid application
+    app.connectMicroservice<MicroserviceOptions>({
+      transport: Transport.RMQ,
+      options: {
+        urls: [process.env.RABBITMQ_URL],
+        queue: process.env.RABBITMQ_ORDER_QUEUE,
+        queueOptions: {
+          durable: true,
+        },
+      },
+    });
+
+    await app.startAllMicroservices();
+    await app.listen(port);
+
+    logger.log(`🚀 HTTP Server running on port ${port}`);
+    logger.log(
+      `📚 Swagger documentation available at http://localhost:${port}/api`,
+    );
+    logger.log('🐰 RabbitMQ consumer started');
+  } catch (error) {
+    logger.error('Failed to start application:', error);
+    process.exit(1);
+  }
 }
+
 bootstrap();

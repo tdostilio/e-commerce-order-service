@@ -1,10 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrdersService } from './orders.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrderStatus } from './enums/order-status.enum';
+import { OrderNotFoundError } from './errors/order.errors';
 
 describe('OrdersService', () => {
   let service: OrdersService;
   let prisma: PrismaService;
+  let mockInventoryClient: { emit: jest.Mock; connect: jest.Mock };
 
   // Mock all Prisma operations we'll need
   const mockPrismaService = {
@@ -22,11 +25,16 @@ describe('OrdersService', () => {
       providers: [
         OrdersService,
         { provide: PrismaService, useValue: mockPrismaService },
+        {
+          provide: 'INVENTORY_SERVICE',
+          useValue: { emit: jest.fn(), connect: jest.fn() },
+        },
       ],
     }).compile();
 
     service = module.get<OrdersService>(OrdersService);
     prisma = module.get<PrismaService>(PrismaService);
+    mockInventoryClient = module.get('INVENTORY_SERVICE');
     jest.clearAllMocks();
   });
 
@@ -53,7 +61,11 @@ describe('OrdersService', () => {
       // Assert
       expect(result).toEqual(expectedOrder);
       expect(prisma.order.create).toHaveBeenCalledWith({
-        data: { status: 'pending', ...orderData },
+        data: {
+          status: 'pending',
+          orderData: {},
+          ...orderData,
+        },
       });
     });
 
@@ -122,70 +134,40 @@ describe('OrdersService', () => {
     });
   });
 
-  // UPDATE
-  describe('update', () => {
-    it('should update a product successfully', async () => {
-      // Arrange
-      const updateData = { sku: 'TEST-001', quantity: 10 };
-      const expectedOrder = {
-        id: '123',
-        ...updateData,
-        updatedAt: new Date(),
-        status: 'pending',
-      };
-      mockPrismaService.order.update.mockResolvedValue(expectedOrder);
-
-      // Act
-      const result = await service.update('123', updateData);
-
-      // Assert
-      expect(result).toEqual(expectedOrder);
-      expect(prisma.order.update).toHaveBeenCalledWith({
-        where: { id: '123', status: 'pending' },
-        data: { ...updateData },
-      });
-    });
-
-    it('should throw error if product not found during update', async () => {
-      // Arrange
-      mockPrismaService.order.update.mockRejectedValue({
-        code: 'P2025', // Prisma's "Record not found" error
-      });
-
-      // Act & Assert
-      await expect(
-        service.update('nonexistent', { quantity: 10 }),
-      ).rejects.toThrow();
-    });
-  });
-
   // DELETE
-  describe('remove', () => {
-    it('should delete a product successfully', async () => {
+  describe('cancelOrder', () => {
+    it('should cancel an order successfully', async () => {
       // Arrange
-      const orderToDelete = {
+      const orderToCancel = {
         id: '123',
+        status: OrderStatus.CANCELLING,
       };
-      mockPrismaService.order.delete.mockResolvedValue(orderToDelete);
+      mockPrismaService.order.update.mockResolvedValue(orderToCancel);
 
       // Act
-      const result = await service.remove('123');
+      const result = await service.cancelOrder('123');
 
       // Assert
-      expect(result).toEqual(orderToDelete);
-      expect(prisma.order.delete).toHaveBeenCalledWith({
+      expect(result).toEqual(orderToCancel);
+      expect(prisma.order.update).toHaveBeenCalledWith({
         where: { id: '123' },
+        data: { status: OrderStatus.CANCELLING },
+      });
+      expect(mockInventoryClient.emit).toHaveBeenCalledWith('order.cancelled', {
+        orderId: '123',
       });
     });
 
-    it('should throw error if product not found during delete', async () => {
+    it('should throw error if order not found during cancellation', async () => {
       // Arrange
-      mockPrismaService.order.delete.mockRejectedValue({
-        code: 'P2025',
-      });
+      mockPrismaService.order.update.mockRejectedValue(
+        new OrderNotFoundError('nonexistent'),
+      );
 
       // Act & Assert
-      await expect(service.remove('nonexistent')).rejects.toThrow();
+      await expect(service.cancelOrder('nonexistent')).rejects.toThrow(
+        OrderNotFoundError,
+      );
     });
   });
 });

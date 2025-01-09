@@ -1,24 +1,37 @@
+version: '3.8'
+
 services:
-  mongodb:
+  mongodb-orders:
     image: mongo:latest
     command: ['--replSet', 'rs0_orders', '--bind_ip_all']
     ports:
       - '27018:27017'
     volumes:
-      - mongodb_data:/data/db
+      - mongodb_orders_data:/data/db
+    networks:
+      - orders_network
 
-  mongo-init:
+  mongo-init-orders:
     image: mongo:latest
     depends_on:
-      - mongodb
+      - mongodb-orders
     restart: on-failure
     command: >
-      mongosh --host mongodb:27017 --eval '
+      mongosh --host mongodb-orders:27017 --eval '
       rs.initiate({
         _id: "rs0_orders",
         members: [{ _id: 0, host: "localhost:27017" }]
       })
       '
+    networks:
+      - orders_network
 
 volumes:
-  mongodb_data:
+  mongodb_orders_data:
+
+networks:
+  orders_network:
+    name: orders_network
+  message_broker_network:
+    name: message_broker_network
+    external: true
