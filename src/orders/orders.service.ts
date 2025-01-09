@@ -28,14 +28,14 @@ export class OrdersService implements OnModuleInit {
 
   async create(data: CreateOrderDto) {
     try {
-      const expiration = new Date();
-      expiration.setMinutes(expiration.getMinutes() + this.TIMEOUT_MINUTES);
+      const timeout = new Date();
+      timeout.setMinutes(timeout.getMinutes() + this.TIMEOUT_MINUTES);
 
       const order = await this.prisma.order.create({
         data: {
           ...data,
           status: OrderStatus.PENDING,
-          expiration,
+          timeout,
         },
       });
 
@@ -64,7 +64,7 @@ export class OrdersService implements OnModuleInit {
       where: { id: event.orderId },
       data: {
         status: OrderStatus.CONFIRMED,
-        expiration: null,
+        timeout: null,
       },
     });
   }
@@ -74,7 +74,7 @@ export class OrdersService implements OnModuleInit {
       where: { id: event.orderId },
       data: {
         status: OrderStatus.FAILED,
-        expiration: null,
+        timeout: null,
       },
     });
   }
@@ -104,7 +104,7 @@ export class OrdersService implements OnModuleInit {
     const timedOutOrders = await this.prisma.order.findMany({
       where: {
         status: OrderStatus.PENDING,
-        expiration: {
+        timeout: {
           lt: new Date(),
         },
       },
@@ -115,7 +115,7 @@ export class OrdersService implements OnModuleInit {
         where: { id: order.id },
         data: {
           status: OrderStatus.FAILED,
-          expiration: null,
+          timeout: null,
         },
       });
     }
@@ -126,7 +126,7 @@ export class OrdersService implements OnModuleInit {
       where: { id: event.orderId },
       data: {
         status: OrderStatus.CONFIRMED,
-        expiration: null,
+        timeout: null,
       },
     });
   }
