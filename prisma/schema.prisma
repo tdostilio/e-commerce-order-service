@@ -1,18 +1,21 @@
+// Database configuration
 datasource db {
-  provider = "mongodb"
-  url      = env("DATABASE_URL")
+  provider = "mongodb"  // Using MongoDB as the database
+  url      = env("DATABASE_URL")  // Connection URL from environment variables
 }
 
+// Prisma client configuration
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client-js"  // Generate TypeScript client
 }
 
+// Order model definition
 model Order {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  status      String
-  sku         String   @unique
-  quantity    Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  timeout  DateTime?
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId  // MongoDB ObjectId
+  status    String    // Current order status (PENDING, CONFIRMED, etc.)
+  sku       String    @unique  // Product identifier
+  quantity  Int       // Number of items ordered
+  createdAt DateTime  @default(now())  // Creation timestamp
+  updatedAt DateTime  @updatedAt  // Last update timestamp
+  timeout   DateTime? // Optional timeout for pending orders
 }

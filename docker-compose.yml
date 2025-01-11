@@ -1,21 +1,27 @@
 version: '3.8'
 
 services:
+  # MongoDB service for order data
   mongodb-orders:
     image: mongo:latest
+    # Configure MongoDB as a replica set (required for transactions)
     command: ['--replSet', 'rs0_orders', '--bind_ip_all']
     ports:
+      # Map container port 27017 to host port 27018
       - '27018:27017'
     volumes:
+      # Persist data between container restarts
       - mongodb_orders_data:/data/db
     networks:
       - orders_network
 
+  # Initialize MongoDB replica set
   mongo-init-orders:
     image: mongo:latest
     depends_on:
       - mongodb-orders
     restart: on-failure
+    # Run replica set initialization script
     command: >
       mongosh --host mongodb-orders:27017 --eval '
       rs.initiate({
@@ -26,12 +32,18 @@ services:
     networks:
       - orders_network
 
+# Persistent storage for MongoDB data
 volumes:
   mongodb_orders_data:
 
+# Network configuration
 networks:
+  # Internal network for order service components
   orders_network:
     name: orders_network
+  # External network for connecting to message broker
+  # This network should be created separately and shared
+  # between microservices
   message_broker_network:
     name: message_broker_network
     external: true

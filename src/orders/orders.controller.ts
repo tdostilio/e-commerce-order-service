@@ -19,14 +19,20 @@ import {
   ReservationConfirmedEvent,
 } from './events/order.events';
 
-// @Controller('orders') creates routes starting with /orders
+/**
+ * Controller handling all order-related HTTP endpoints and message patterns
+ * @ApiTags('orders') groups these endpoints in Swagger documentation
+ */
 @ApiTags('orders')
 @Controller('orders')
 export class OrdersController {
-  // OrdersService is automatically injected
   constructor(private readonly ordersService: OrdersService) {}
 
-  // @Get() creates a GET /orders endpoint
+  /**
+   * GET /orders - Retrieve all orders, optionally filtered by status
+   * @param status Optional status filter
+   * @returns Array of orders
+   */
   @Get()
   @ApiOperation({ summary: 'Get all orders' })
   @ApiQuery({
@@ -38,12 +44,15 @@ export class OrdersController {
     return this.ordersService.findAll(status);
   }
 
-  // @Get(':id') creates a GET /orders/:id endpoint
-  // @Param('id') extracts the id from the URL
+  /**
+   * GET /orders/:id - Retrieve a single order by ID
+   * @param id Order ID
+   * @throws NotFoundException if order doesn't exist
+   */
   @Get(':id')
   @ApiOperation({ summary: 'Get an order by id' })
-  @ApiResponse({ status: 200, description: 'Return the order.' })
-  @ApiResponse({ status: 404, description: 'Order not found.' })
+  @ApiResponse({ status: 200, description: 'Order found' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
   async findOne(@Param('id') id: string) {
     try {
       return await this.ordersService.findOne(id);
@@ -55,24 +64,21 @@ export class OrdersController {
     }
   }
 
-  // @Post() creates a POST /orders endpoint
-  // @Body() extracts the request body and validates it against CreateOrderDto
+  /**
+   * POST /orders - Create a new order
+   * @param createOrderDto Order creation data
+   */
   @Post()
   @ApiOperation({ summary: 'Create a new order' })
-  @ApiResponse({
-    status: 201,
-    description: 'The order has been created successfully.',
-  })
-  @ApiResponse({ status: 400, description: 'Bad Request.' })
   async create(@Body() createOrderDto: CreateOrderDto) {
-    try {
-      return await this.ordersService.create(createOrderDto);
-    } catch (error) {
-      throw error;
-    }
+    return await this.ordersService.create(createOrderDto);
   }
 
-  // @Delete(':id') creates a DELETE /orders/:id endpoint
+  /**
+   * DELETE /orders/:id - Cancel an order
+   * @param id Order ID
+   * @throws NotFoundException if order doesn't exist
+   */
   @Delete(':id')
   @ApiOperation({ summary: 'Cancel an order' })
   @ApiResponse({
@@ -94,6 +100,9 @@ export class OrdersController {
     }
   }
 
+  /**
+   * Message pattern handlers for RabbitMQ events
+   */
   @EventPattern('inventory.reservation_confirmed')
   async handleReservationConfirmed(event: ReservationConfirmedEvent) {
     await this.ordersService.handleReservationConfirmed(event);

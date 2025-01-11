@@ -12,25 +12,34 @@ import { Cron } from '@nestjs/schedule';
 import { OrderNotFoundError } from './errors/order.errors';
 import { lastValueFrom } from 'rxjs';
 
+// @Injectable() marks this as a service that can be dependency injected
 @Injectable()
 export class OrdersService implements OnModuleInit {
+  // Time in minutes before an order times out if not confirmed
   private readonly TIMEOUT_MINUTES = 5;
+  // Logger instance for this service
   private readonly logger = new Logger(OrdersService.name);
 
   constructor(
+    // Inject the database service
     private prisma: PrismaService,
+    // Inject the RabbitMQ client for communicating with inventory service
     @Inject('INVENTORY_SERVICE') private inventoryClient: ClientProxy,
   ) {}
 
+  // Connect to RabbitMQ when the module initializes
   async onModuleInit() {
     await this.inventoryClient.connect();
   }
 
+  // Create a new order and notify inventory service
   async create(data: CreateOrderDto) {
     try {
+      // Calculate timeout timestamp
       const timeout = new Date();
       timeout.setMinutes(timeout.getMinutes() + this.TIMEOUT_MINUTES);
 
+      // Create order in database
       const order = await this.prisma.order.create({
         data: {
           ...data,
@@ -39,6 +48,7 @@ export class OrdersService implements OnModuleInit {
         },
       });
 
+      // Notify inventory service about new order
       this.logger.log(`Publishing order created event for order ${order.id}`);
       await lastValueFrom(
         this.inventoryClient.emit('order.created', {
