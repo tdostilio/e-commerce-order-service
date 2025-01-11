@@ -5,6 +5,7 @@ import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { rabbitmqConfig } from '../config/rabbitmq.config';
 
 @Module({
   imports: [
@@ -13,19 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
     ClientsModule.register([
       {
         name: 'INVENTORY_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
-          queue: 'inventory_queue',
-          queueOptions: {
-            durable: true,
-          },
-          socketOptions: {
-            heartbeat: 60,
-          },
-          noAck: true,
-          prefetchCount: 1,
-        },
+        ...rabbitmqConfig(),
       },
     ]),
   ],
