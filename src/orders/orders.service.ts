@@ -18,6 +18,7 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import { timeout, TimeoutError } from 'rxjs';
 import { catchError } from 'rxjs';
 import { tap } from 'rxjs';
+import { TimeoutConfig } from '../config/timeout.config';
 
 // @Injectable() marks this as a service that can be dependency injected
 @Injectable()
@@ -37,7 +38,7 @@ export class OrdersService implements OnModuleInit {
   constructor(
     // Inject the database service
     private prisma: PrismaService,
-    // Inject the RabbitMQ client for communicating with inventory service
+    // Inject the RabbitMQ client for communicating with product service
     @Inject('INVENTORY_SERVICE') private inventoryClient: ClientProxy,
   ) {
     // Log RabbitMQ configuration on service instantiation
@@ -47,8 +48,12 @@ export class OrdersService implements OnModuleInit {
     );
     this.logger.log('RabbitMQ configuration:', {
       url: redactedUrl,
-      queue: process.env.RABBITMQ_INVENTORY_QUEUE,
+      queue: process.env.RABBITMQ_PRODUCT_QUEUE,
     });
+
+    if (TimeoutConfig.isDevMode) {
+      this.logger.log('Running in development mode with extended timeouts');
+    }
   }
 
   // Connect to RabbitMQ when the module initializes
@@ -154,14 +159,21 @@ export class OrdersService implements OnModuleInit {
     sku: string,
     quantity: number,
   ): Promise<void> {
+    this.logger.debug('Starting product validation...', {
+      pattern: 'product.check_availability',
+      queue: process.env.RABBITMQ_PRODUCT_QUEUE,
+      isConnected: this.isConnected,
+      timeoutMs: TimeoutConfig.rpc,
+    });
+
     if (!this.isConnected) {
       throw new ServiceUnavailableException('Message broker is not connected');
     }
 
     // Add detailed logging before sending
     this.logger.debug('Attempting inventory check:', {
-      pattern: 'inventory.check_availability',
-      queue: process.env.RABBITMQ_INVENTORY_QUEUE,
+      pattern: 'product.check_availability',
+      queue: process.env.RABBITMQ_PRODUCT_QUEUE,
       payload: { sku, quantity },
     });
 
@@ -173,26 +185,24 @@ export class OrdersService implements OnModuleInit {
             quantity,
           })
           .pipe(
-            timeout(5000),
-            tap((response) => {
-              // Log successful response
-              this.logger.debug('Received inventory check response:', {
-                pattern: 'inventory.check_availability',
-                response,
-              });
+            timeout(TimeoutConfig.rpc),
+            tap(() => {
+              if (TimeoutConfig.isDevMode) {
+                this.logger.debug(`RPC timeout set to ${TimeoutConfig.rpc}ms`);
+              }
             }),
             catchError((error) => {
               // Handle specific error types without disconnecting
               if (error.message?.includes('no matching message handler')) {
-                this.logger.warn('Inventory service endpoint not available:', {
-                  pattern: 'inventory.check_availability',
+                this.logger.warn('Product service endpoint not available:', {
+                  pattern: 'product.check_availability',
                   error: error.message,
-                  queue: process.env.RABBITMQ_INVENTORY_QUEUE,
+                  queue: process.env.RABBITMQ_PRODUCT_QUEUE,
                 });
                 return null;
               }
               throw new ServiceUnavailableException(
-                'Inventory service unavailable',
+                'Product service unavailable',
               );
             }),
           ),
@@ -201,7 +211,7 @@ export class OrdersService implements OnModuleInit {
       // Handle null response from catchError
       if (!response) {
         throw new ServiceUnavailableException(
-          'Inventory service endpoint not available',
+          'Product service endpoint not available',
         );
       }
 
@@ -219,16 +229,16 @@ export class OrdersService implements OnModuleInit {
         throw error;
       }
       if (error instanceof TimeoutError) {
-        this.logger.warn('Inventory service request timed out');
-        throw new ServiceUnavailableException(
-          'Inventory service request timed out',
-        );
+        const timeoutMsg = TimeoutConfig.isDevMode
+          ? 'Request timed out during debugging'
+          : 'Request timed out';
+        throw new ServiceUnavailableException(timeoutMsg);
       }
       // Log the error but don't expose internal details to the client
       this.logger.error('Failed to validate inventory:', error);
       throw error instanceof ServiceUnavailableException
         ? error
-        : new ServiceUnavailableException('Inventory service unavailable');
+        : new ServiceUnavailableException('Product service unavailable');
     }
   }
 
