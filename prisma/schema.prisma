@@ -18,4 +18,17 @@ model Order {
   createdAt DateTime  @default(now())  // Creation timestamp
   updatedAt DateTime  @updatedAt  // Last update timestamp
   timeout   DateTime? // Optional timeout for pending orders
+  outboxMessages OutboxMessage[]
+}
+
+model OutboxMessage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  type      String
+  payload   Json
+  status    String
+  orderId   String   @db.ObjectId
+  order     Order    @relation(fields: [orderId], references: [id])
+  createdAt DateTime @default(now())
+  attempts Int @default(0)
+  error     String?
 }

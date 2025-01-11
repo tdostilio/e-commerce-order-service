@@ -4,7 +4,7 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Run Service",
+      "name": "Run Order Service",
       "runtimeExecutable": "yarn",
       "runtimeArgs": ["start:debug"],
       "cwd": "${workspaceFolder}",
@@ -12,7 +12,10 @@
       "outputCapture": "std",
       "sourceMaps": true,
       "autoAttachChildProcesses": true,
-      "restart": true
+      "restart": true,
+      "env": {
+        "RABBITMQ_URL": "amqp://guest:guest@localhost:5672"
+      }
     },
     {
       "type": "node",
