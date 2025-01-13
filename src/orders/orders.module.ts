@@ -6,6 +6,8 @@ import { OrdersService } from './orders.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { rabbitmqConfig } from '../config/rabbitmq.config';
+import { OrdersHttpController } from './controllers/orders.http.controller';
+import { OrdersMessageController } from './controllers/orders.message.controller';
 
 @Module({
   imports: [
@@ -18,7 +20,7 @@ import { rabbitmqConfig } from '../config/rabbitmq.config';
       },
     ]),
   ],
-  controllers: [OrdersController],
+  controllers: [OrdersHttpController, OrdersMessageController],
   providers: [OrdersService, PrismaService],
 })
 export class OrdersModule {}
