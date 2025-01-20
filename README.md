@@ -4,110 +4,70 @@ A NestJS microservice for managing orders in our e-commerce platform.
 
 ## Prerequisites
 
-- Node.js (v18 or higher)
 - Docker and Docker Compose
-- Yarn
+- MongoDB Atlas account
+- RabbitMQ (running via shared infrastructure https://github.com/tdostilio/local-infrastructure)
 
 ## Getting Started
 
 1. **Clone the repository**
 
-   ```
+   ```bash
    git clone <repository-url>
    ```
 
 2. **Set up environment variables**
-   Copy the example env file
+   Copy the example env file and update with your MongoDB Atlas URL
 
-   ```
+   ```bash
    cp .env.example .env
    ```
 
    The .env file should contain:
 
    ```
-   DATABASE_URL="mongodb://localhost:27018/orders?replicaSet=rs0_orders&directConnection=true"
+   DATABASE_URL="your-mongodb-atlas-connection-string"
+   RABBITMQ_URL="amqp://guest:guest@localhost:5672"
+   RABBITMQ_INVENTORY_QUEUE="inventory_queue"
+   PORT=3001
    ```
 
-3. **Start MongoDB with Docker**
+3. **Start the service**
 
-   ```
-   docker compose up -d
-   ```
+   ```bash
+   # Ensure the message_broker_network exists
+   docker network create message_broker_network || true
 
-4. **Run the application**
+   # Start the development service
+   docker compose up
 
-   ```
-   yarn start
-   ```
-
-5. **Install dependencies**
-
-   ```
-   yarn install
+   # Or for production build
+   docker compose -f docker-compose.prod.yml up
    ```
 
-6. **Generate Prisma client**
+## Debugging
 
-   ```
-   yarn prisma generate
-   ```
-
-7. **Start the development server**
-   ```
-   yarn start:dev
-   ```
+- Debug port: 9229 (development only)
+- Breakpoints can be set directly in TypeScript files
+- Use the "Debug Order Service (Docker)" launch configuration in VSCode
+- Hot reloading is enabled in development mode
 
 ## API Endpoints
 
 The service runs on `http://localhost:3001` with the following endpoints:
 
-- `POST /api/orders` - Create an order
-- `GET /api/orders` - List all orders
-- `GET /api/orders/:id` - Get a single order
-- `PUT /api/orders/:id` - Update an order
-- `DELETE /api/orders/:id` - Delete an order
+- `POST /orders` - Create an order
+- `GET /orders` - List all orders
+- `GET /orders/:id` - Get a single order
+- `DELETE /orders/:id` - Cancel an order
 
-Documentation is available at `http://localhost:3001/api/docs`
+## Message Patterns
 
-## Example Request
+The service listens for the following RabbitMQ events:
 
-Create an order
+- `inventory.reservation_confirmed` - Handle successful inventory reservations
+- `inventory.reservation_failed` - Handle failed inventory reservations
 
-```
-curl -X POST http://localhost:3001/api/orders \
--H "Content-Type: application/json" \
--d '{
-"sku": "TEST-001",
-"quantity": 100
-}'
-```
+## Documentation
 
-## Development
-
-- `yarn start:dev` - Start with hot-reload
-- `yarn start:debug` - Start with debugging
-- `yarn test` - Run tests
-- `yarn lint` - Run linting
-
-## Troubleshooting
-
-1. **MongoDB Connection Issues**
-
-   - Ensure Docker is running
-   - Try restarting the containers: `docker-compose down -v && docker-compose up -d`
-   - Check MongoDB logs: `docker-compose logs mongodb`
-
-2. **Prisma Issues**
-   - Regenerate Prisma client: `yarn prisma:generate`
-   - Reset database: `yarn prisma:reset`
-
-## Contributing
-
-1. Create a feature branch
-2. Make your changes
-3. Submit a pull request
-
-## License
-
-MIT
+Swagger documentation is available at `http://localhost:3001/api`

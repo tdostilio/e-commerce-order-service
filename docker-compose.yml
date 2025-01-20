@@ -1,66 +1,23 @@
-version: '3.8'
-
 services:
-  # MongoDB service for order data
-  mongodb-orders:
-    image: mongo:latest
-    # Configure MongoDB as a replica set (required for transactions)
-    command: ['--replSet', 'rs0_orders', '--bind_ip_all']
-    ports:
-      # Map container port 27017 to host port 27018
-      - '27018:27017'
-    volumes:
-      # Persist data between container restarts
-      - mongodb_orders_data:/data/db
-    networks:
-      - orders_network
-      - message_broker_network
-
-  # Initialize MongoDB replica set
-  mongo-init-orders:
-    image: mongo:latest
-    depends_on:
-      - mongodb-orders
-    restart: on-failure
-    # Run replica set initialization script
-    command: >
-      mongosh --host mongodb-orders:27017 --eval '
-      rs.initiate({
-        _id: "rs0_orders",
-        members: [{ _id: 0, host: "localhost:27017" }]
-      })
-      '
-    networks:
-      - orders_network
-
   order-service:
-    build: .
+    build:
+      context: .
+      target: development # Use development stage from multi-stage Dockerfile
     ports:
-      - '3001:3001'
+      - '3001:3001' # API port
+      - '9230:9229' # Map container's 9229 to host's 9230 for debugging
+    volumes:
+      - .:/usr/src/app # Mount source code for hot reloading
+      - /usr/src/app/node_modules # Prevent mounting local node_modules
+    command: yarn start:debug # Override CMD from Dockerfile for debugging
     environment:
-      - DATABASE_URL=mongodb://mongodb-orders:27017/orders?replicaSet=rs0_orders&directConnection=true
+      - DATABASE_URL=${DATABASE_URL} # MongoDB Atlas connection string
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
       - RABBITMQ_INVENTORY_QUEUE=inventory_queue
       - PORT=3001
-    depends_on:
-      - mongodb-orders
-      - mongo-init-orders
     networks:
-      - orders_network
-      - message_broker_network
+      - message_broker_network # Connect to shared RabbitMQ network
 
-# Persistent storage for MongoDB data
-volumes:
-  mongodb_orders_data:
-
-# Network configuration
 networks:
-  # Internal network for order service components
-  orders_network:
-    name: orders_network
-  # External network for connecting to message broker
-  # This network should be created separately and shared
-  # between microservices
   message_broker_network:
-    name: message_broker_network
-    external: true
+    external: true # Use pre-existing network from infrastructure

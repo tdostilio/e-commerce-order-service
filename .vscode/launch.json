@@ -3,28 +3,14 @@
   "configurations": [
     {
       "type": "node",
-      "request": "launch",
-      "name": "Run Order Service",
-      "runtimeExecutable": "yarn",
-      "runtimeArgs": ["start:debug"],
-      "cwd": "${workspaceFolder}",
-      "console": "internalConsole",
-      "outputCapture": "std",
-      "sourceMaps": true,
-      "autoAttachChildProcesses": true,
+      "request": "attach",
+      "name": "Debug Order Service (Docker)",
+      "remoteRoot": "/usr/src/app",
+      "localRoot": "${workspaceFolder}",
+      "port": 9230,
       "restart": true,
-      "env": {
-        "RABBITMQ_URL": "amqp://guest:guest@localhost:5672"
-      }
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Run Tests",
-      "runtimeExecutable": "yarn",
-      "runtimeArgs": ["test"],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }
