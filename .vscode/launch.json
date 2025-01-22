@@ -4,13 +4,12 @@
     {
       "type": "node",
       "request": "attach",
-      "name": "Debug Order Service (Docker)",
-      "remoteRoot": "/usr/src/app",
-      "localRoot": "${workspaceFolder}",
+      "name": "Debug Order Service in Docker",
       "port": 9230,
       "restart": true,
       "sourceMaps": true,
-      "skipFiles": ["<node_internals>/**"]
+      "remoteRoot": "/usr/src/app",
+      "localRoot": "${workspaceFolder}"
     }
   ]
 }

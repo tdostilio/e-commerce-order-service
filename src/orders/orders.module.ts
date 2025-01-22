@@ -15,8 +15,16 @@ import { OrdersMessageController } from './controllers/orders.message.controller
     ScheduleModule.forRoot(),
     ClientsModule.register([
       {
-        name: 'INVENTORY_SERVICE',
-        ...rabbitmqConfig(),
+        name: 'PRODUCT_SERVICE',
+        transport: Transport.RMQ,
+        options: {
+          urls: [process.env.RABBITMQ_URL],
+          queue: process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
+          queueOptions: {
+            durable: true,
+          },
+          persistent: true,
+        },
       },
     ]),
   ],

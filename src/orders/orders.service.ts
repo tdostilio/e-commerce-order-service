@@ -39,7 +39,7 @@ export class OrdersService implements OnModuleInit {
     // Inject the database service
     private prisma: PrismaService,
     // Inject the RabbitMQ client for communicating with product service
-    @Inject('INVENTORY_SERVICE') private inventoryClient: ClientProxy,
+    @Inject('PRODUCT_SERVICE') private productClient: ClientProxy,
   ) {
     // Log RabbitMQ configuration on service instantiation
     const redactedUrl = process.env.RABBITMQ_URL?.replace(
@@ -48,7 +48,7 @@ export class OrdersService implements OnModuleInit {
     );
     this.logger.log('RabbitMQ configuration:', {
       url: redactedUrl,
-      queue: process.env.RABBITMQ_PRODUCT_QUEUE,
+      queue: process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
     });
 
     if (TimeoutConfig.isDevMode) {
@@ -83,7 +83,7 @@ export class OrdersService implements OnModuleInit {
           this.logger.debug('Attempting to establish RabbitMQ connection...');
 
           // Add more detailed error handling for the connection
-          const client = (this.inventoryClient as any).client;
+          const client = (this.productClient as any).client;
           if (client) {
             const redactedUrls = client.options?.urls?.map((url) =>
               url.replace(/:\/\/(.*?)@/, '://****:****@'),
@@ -97,12 +97,12 @@ export class OrdersService implements OnModuleInit {
             });
           }
 
-          await this.inventoryClient.connect();
+          await this.productClient.connect();
           this.isConnected = true;
           this.logger.log('Successfully connected to RabbitMQ');
 
           // Set up connection error listener with more detailed logging
-          (this.inventoryClient as any).client.on('error', (err: any) => {
+          (this.productClient as any).client.on('error', (err: any) => {
             this.logger.error('RabbitMQ connection error:', {
               message: err.message,
               code: err.code,
@@ -111,7 +111,7 @@ export class OrdersService implements OnModuleInit {
             this.handleDisconnect();
           });
 
-          (this.inventoryClient as any).client.on('close', (err?: any) => {
+          (this.productClient as any).client.on('close', (err?: any) => {
             this.logger.warn(
               'RabbitMQ connection closed',
               err
@@ -161,7 +161,7 @@ export class OrdersService implements OnModuleInit {
   ): Promise<void> {
     this.logger.debug('Starting product validation...', {
       pattern: 'product.check_availability',
-      queue: process.env.RABBITMQ_PRODUCT_QUEUE,
+      queue: process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
       isConnected: this.isConnected,
       timeoutMs: TimeoutConfig.rpc,
     });
@@ -173,13 +173,13 @@ export class OrdersService implements OnModuleInit {
     // Add detailed logging before sending
     this.logger.debug('Attempting inventory check:', {
       pattern: 'product.check_availability',
-      queue: process.env.RABBITMQ_PRODUCT_QUEUE,
+      queue: process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
       payload: { sku, quantity },
     });
 
     try {
       const response = await lastValueFrom(
-        this.inventoryClient
+        this.productClient
           .send('inventory.check_availability', {
             sku,
             quantity,
@@ -197,7 +197,8 @@ export class OrdersService implements OnModuleInit {
                 this.logger.warn('Product service endpoint not available:', {
                   pattern: 'product.check_availability',
                   error: error.message,
-                  queue: process.env.RABBITMQ_PRODUCT_QUEUE,
+                  queue:
+                    process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
                 });
                 return null;
               }
@@ -310,7 +311,7 @@ export class OrdersService implements OnModuleInit {
 
     try {
       await lastValueFrom(
-        this.inventoryClient.emit(event, data).pipe(
+        this.productClient.emit(event, data).pipe(
           timeout(5000), // Add timeout of 5 seconds
         ),
       );
@@ -347,7 +348,7 @@ export class OrdersService implements OnModuleInit {
       data: { status: OrderStatus.CANCELLING },
     });
 
-    this.inventoryClient.emit('order.cancelled', {
+    this.productClient.emit('order.cancelled', {
       orderId: order.id,
     });
 

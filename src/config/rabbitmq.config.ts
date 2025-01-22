@@ -8,10 +8,22 @@ export const rabbitmqConfig = (): RmqOptions => {
     transport: Transport.RMQ,
     options: {
       urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
-      queue: 'inventory_queue',
-      socketOptions: {
-        heartbeat: 60,
+      queue: process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
+      queueOptions: {
+        durable: true,
       },
+      socketOptions: {
+        reconnectTimeInSeconds: 5,
+        heartbeatIntervalInSeconds: 60,
+        connectionOptions: {
+          timeout: 30000,
+          keepAlive: true,
+          noDelay: true,
+        },
+      },
+      prefetchCount: 1,
+      noAck: false,
+      persistent: true,
     },
   };
 
