@@ -46,10 +46,6 @@ export class OrdersService implements OnModuleInit {
       /:\/\/(.*?)@/,
       '://****:****@',
     );
-    this.logger.log('RabbitMQ configuration:', {
-      url: redactedUrl,
-      queue: process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
-    });
 
     if (TimeoutConfig.isDevMode) {
       this.logger.log('Running in development mode with extended timeouts');

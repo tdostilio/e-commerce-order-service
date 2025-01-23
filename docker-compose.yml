@@ -1,23 +1,26 @@
+# order-service
 services:
   order-service:
     build:
       context: .
-      target: development # Use development stage from multi-stage Dockerfile
+      target: development
     ports:
-      - '3001:3001' # API port
-      - '9230:9229' # Map container's 9229 to host's 9230 for debugging
+      - '3001:3001'
+      - '9230:9229'
     volumes:
-      - .:/usr/src/app # Mount source code for hot reloading
-      - /usr/src/app/node_modules # Prevent mounting local node_modules
-    command: yarn start:debug # Override CMD from Dockerfile for debugging
+      - .:/usr/src/app
+      - order_service_modules:/usr/src/app/node_modules
+    command: yarn start:debug
     environment:
-      - DATABASE_URL=${DATABASE_URL} # MongoDB Atlas connection string
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-      - RABBITMQ_INVENTORY_QUEUE=inventory_queue
+      - NODE_ENV=development
+      - DATABASE_URL=${DATABASE_URL}
       - PORT=3001
     networks:
-      - message_broker_network # Connect to shared RabbitMQ network
+      - message_broker_network
+
+volumes:
+  order_service_modules:
 
 networks:
   message_broker_network:
-    external: true # Use pre-existing network from infrastructure
+    external: true

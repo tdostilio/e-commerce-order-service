@@ -1,48 +1,54 @@
-# Development stage for hot reloading and debugging
 FROM node:20-slim as development
 
-# Install OpenSSL for Prisma and other essential dependencies
-RUN apt-get update && apt-get install -y openssl
+# Install OpenSSL, procps and other dependencies
+RUN apt-get update && apt-get install -y openssl procps
 
-# Set working directory in container
+# Set working directory
 WORKDIR /usr/src/app
 
-# Copy dependency files first to leverage Docker layer caching
-COPY package*.json yarn.lock ./
+# Copy package files
+COPY package*.json ./
+COPY yarn.lock ./
+
+# Install dependencies
 RUN yarn install
 
-# Copy and generate Prisma client
+# Copy prisma schema
 COPY prisma ./prisma/
+
+# Generate Prisma client
 RUN yarn prisma generate
 
-# Copy the rest of the application code
+# Copy source code
 COPY . .
-RUN yarn build
 
-# Expose API and debug ports
+# Expose ports
 EXPOSE 3001
 EXPOSE 9229
 
-# Start app in debug mode for development
+# Use development command by default
 CMD ["yarn", "start:debug"]
 
-# Production stage for minimal image size
+# Create a separate production build stage
 FROM node:20-slim as production
 
 WORKDIR /usr/src/app
 
+COPY package*.json ./
+COPY yarn.lock ./
+
 # Install only production dependencies
-COPY package*.json yarn.lock ./
 RUN yarn install --production
 
-# Copy and generate Prisma client for production
 COPY prisma ./prisma/
 RUN yarn prisma generate
 
-# Copy only the built assets from development stage
-COPY --from=development /usr/src/app/dist ./dist
+COPY . .
+RUN yarn build
+
+# Remove development files
+RUN rm -rf src test
 
 EXPOSE 3001
 
-# Start app in production mode
-CMD ["node", "dist/main"] 
+CMD ["yarn", "start:prod"]
