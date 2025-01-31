@@ -1,4 +1,12 @@
-import { Injectable, OnModuleInit, Inject, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  Inject,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ClientProxy } from '@nestjs/microservices';
@@ -13,12 +21,8 @@ import {
   OrderNotFoundError,
   InvalidParameterError,
 } from './errors/order.errors';
-import { lastValueFrom } from 'rxjs';
-import { ServiceUnavailableException } from '@nestjs/common';
-import { timeout, TimeoutError } from 'rxjs';
-import { catchError } from 'rxjs';
-import { tap } from 'rxjs';
-import { TimeoutConfig } from '../config/timeout.config';
+import { lastValueFrom, timeout } from 'rxjs';
+import { HttpService } from '@nestjs/axios';
 
 // @Injectable() marks this as a service that can be dependency injected
 @Injectable()
@@ -34,22 +38,24 @@ export class OrdersService implements OnModuleInit {
   private readonly resetTimeout = 60000; // 1 minute
   private isConnected = false;
   private connectionPromise: Promise<void> | null = null;
+  private readonly productServiceUrl: string;
 
   constructor(
     // Inject the database service
     private prisma: PrismaService,
     // Inject the RabbitMQ client for communicating with product service
     @Inject('PRODUCT_SERVICE') private productClient: ClientProxy,
+    private readonly httpService: HttpService,
   ) {
+    // Default to host.docker.internal for local development
+    this.productServiceUrl =
+      process.env.PRODUCT_SERVICE_URL || 'http://host.docker.internal:3000';
+
     // Log RabbitMQ configuration on service instantiation
     const redactedUrl = process.env.RABBITMQ_URL?.replace(
       /:\/\/(.*?)@/,
       '://****:****@',
     );
-
-    if (TimeoutConfig.isDevMode) {
-      this.logger.log('Running in development mode with extended timeouts');
-    }
   }
 
   // Connect to RabbitMQ when the module initializes
@@ -150,92 +156,41 @@ export class OrdersService implements OnModuleInit {
     }, this.reconnectInterval);
   }
 
-  // Separate method for inventory validation
+  // Validate that SKU exists in product catalog
   private async validateInventory(
     sku: string,
     quantity: number,
   ): Promise<void> {
-    this.logger.debug('Starting product validation...', {
-      pattern: 'product.check_availability',
-      queue: process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
-      isConnected: this.isConnected,
-      timeoutMs: TimeoutConfig.rpc,
-    });
-
-    if (!this.isConnected) {
-      throw new ServiceUnavailableException('Message broker is not connected');
-    }
-
-    // Add detailed logging before sending
-    this.logger.debug('Attempting inventory check:', {
-      pattern: 'product.check_availability',
-      queue: process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
-      payload: { sku, quantity },
-    });
+    this.logger.debug('Starting product validation...', { sku, quantity });
 
     try {
-      const response = await lastValueFrom(
-        this.productClient
-          .send('inventory.check_availability', {
-            sku,
-            quantity,
-          })
-          .pipe(
-            timeout(TimeoutConfig.rpc),
-            tap(() => {
-              if (TimeoutConfig.isDevMode) {
-                this.logger.debug(`RPC timeout set to ${TimeoutConfig.rpc}ms`);
-              }
-            }),
-            catchError((error) => {
-              // Handle specific error types without disconnecting
-              if (error.message?.includes('no matching message handler')) {
-                this.logger.warn('Product service endpoint not available:', {
-                  pattern: 'product.check_availability',
-                  error: error.message,
-                  queue:
-                    process.env.RABBITMQ_INVENTORY_QUEUE || 'inventory_queue',
-                });
-                return null;
-              }
-              throw new ServiceUnavailableException(
-                'Product service unavailable',
-              );
-            }),
-          ),
+      const { data } = await lastValueFrom(
+        this.httpService.get(`${this.productServiceUrl}/products/${sku}`),
       );
 
-      // Handle null response from catchError
-      if (!response) {
-        throw new ServiceUnavailableException(
-          'Product service endpoint not available',
-        );
+      if (!data) {
+        throw new NotFoundException(`Product with SKU ${sku} not found`);
       }
 
-      if (!response.skuExists) {
-        throw new InvalidParameterError(`Invalid SKU: ${sku}`);
-      }
-
-      if (!response.hasAvailableStock) {
-        throw new InvalidParameterError(
-          `Insufficient stock for SKU ${sku}. Requested: ${quantity}, Available: ${response.availableQuantity}`,
-        );
+      if (!data.stock || data.stock < quantity) {
+        throw new BadRequestException(`Insufficient stock for SKU ${sku}`);
       }
     } catch (error) {
-      if (error instanceof InvalidParameterError) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
-      if (error instanceof TimeoutError) {
-        const timeoutMsg = TimeoutConfig.isDevMode
-          ? 'Request timed out during debugging'
-          : 'Request timed out';
-        throw new ServiceUnavailableException(timeoutMsg);
+
+      if (error.code === 'ECONNREFUSED') {
+        throw new ServiceUnavailableException(
+          'Products service is unavailable',
+        );
       }
-      // Log the error but don't expose internal details to the client
-      this.logger.error('Failed to validate inventory:', error);
-      throw error instanceof ServiceUnavailableException
-        ? error
-        : new ServiceUnavailableException('Product service unavailable');
+
+      this.logger.error('Failed to validate product:', error);
+      throw new ServiceUnavailableException('Products service unavailable');
     }
   }
 

@@ -7,6 +7,10 @@ import {
   Delete,
   NotFoundException,
   Query,
+  BadRequestException,
+  ServiceUnavailableException,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { OrdersService } from '../orders.service';
@@ -16,6 +20,7 @@ import { OrderNotFoundError } from '../errors/order.errors';
 @ApiTags('orders')
 @Controller('orders')
 export class OrdersHttpController {
+  private readonly logger = new Logger(OrdersHttpController.name);
   constructor(private readonly ordersService: OrdersService) {}
 
   @Get()
@@ -31,8 +36,39 @@ export class OrdersHttpController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new order' })
+  @ApiResponse({
+    status: 201,
+    description: 'The order has been successfully created.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid parameters or insufficient inventory.',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Product service is unavailable.',
+  })
   async create(@Body() createOrderDto: CreateOrderDto) {
-    return await this.ordersService.create(createOrderDto);
+    try {
+      const order = await this.ordersService.create(createOrderDto);
+      return {
+        success: true,
+        message: 'Order created successfully',
+        data: order,
+      };
+    } catch (error) {
+      if (error.name === 'InvalidParameterError') {
+        throw new BadRequestException(error.message);
+      }
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+      // Log unexpected errors but don't expose details to client
+      this.logger.error('Failed to create order:', error);
+      throw new InternalServerErrorException(
+        'An unexpected error occurred while creating the order',
+      );
+    }
   }
 
   @Delete(':id')

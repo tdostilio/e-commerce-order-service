@@ -6,6 +6,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersHttpController } from './controllers/orders.http.controller';
 import { OrdersMessageController } from './controllers/orders.message.controller';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { OrdersMessageController } from './controllers/orders.message.controller
         },
       },
     ]),
+    HttpModule,
   ],
   controllers: [OrdersHttpController, OrdersMessageController],
   providers: [OrdersService, PrismaService],
